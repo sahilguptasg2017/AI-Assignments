@@ -1,411 +1,519 @@
 # Boilerplate for AI Assignment — Knowledge Representation, Reasoning and Planning
 # CSE 643
 
+# Import necessary libraries
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import networkx as nx
-
 from pyDatalog import pyDatalog
-
 from collections import defaultdict, deque
-from itertools import combinations
-from datetime import datetime
-
-import os
-
+# import time
+# import tracemalloc
 ## ****IMPORTANT****
 ## Don't import or use any other libraries other than defined above
 ## Otherwise your code file will be rejected in the automated testing
 
+# ------------------ Global Variables ------------------
+route_to_stops = defaultdict(list)  # Mapping of route IDs to lists of stops
+trip_to_route = {}                   # Mapping of trip IDs to route IDs
+stop_trip_count = defaultdict(int)    # Count of trips for each stop
+fare_rules = {}                      # Mapping of route IDs to fare information
+merged_fare_df = None                # To be initialized in create_kb()
 
-route_to_stops = defaultdict(list)  # Maps route_id to an ordered list of stop_ids
-trip_to_route = {}  # Maps trip_id to route_id
-stop_trip_count = defaultdict(int)  # Maps stop_id to count of trips stopping there
-fare_rules = {}  # Maps route_id to fare information
+# Load static data from GTFS (General Transit Feed Specification) files
+df_stops = pd.read_csv('GTFS/stops.txt')
+df_routes = pd.read_csv('GTFS/routes.txt')
+df_stop_times = pd.read_csv('GTFS/stop_times.txt')
+df_fare_attributes = pd.read_csv('GTFS/fare_attributes.txt')
+df_trips = pd.read_csv('GTFS/trips.txt')
+df_fare_rules = pd.read_csv('GTFS/fare_rules.txt')
 
-GTFSdata = {}
-## Q1: Data Loading and Knowledge Base Creation
-# Function to load the OTD static data
-def load_static_data():
+# ------------------ Function Definitions ------------------
+# print(df_stops , df_routes , df_stop_times , df_fare_attributes , df_trips , df_fare_rules)
+# Function to create knowledge base from the loaded data
+def create_kb():
     """
-    Purpose: 
-        Load the provided OTD static data and store it in Python data types.
-
-    Expected Input:
-        - None
-
-    Expected Output:
-        - Dictionary containing the loaded data for routes, trips, stops, stop times, and fare rules.
-
-    """
-    datapath = r'Assignment-2/GTFS'
-    routesdata = os.path.join(datapath , 'routes.txt')
-    GTFSdata['routes'] = pd.read_csv(routesdata)
-    tripsdata = os.path.join(datapath , 'trips.txt')
-    GTFSdata['trips'] = pd.read_csv(tripsdata)
-    stopsdata = os.path.join(datapath , 'stops.txt')
-    GTFSdata['stops'] = pd.read_csv(stopsdata)
-    stoptimesdata = os.path.join(datapath , 'stop_times.txt')
-    GTFSdata['stoptimes'] = pd.read_csv(stoptimesdata)
-    farerulesdata = os.path.join(datapath,'fare_rules.txt')
-    GTFSdata['farerules'] = pd.read_csv(farerulesdata)
-    return GTFSdata
-
-# Function to create the Knowledge Base (KB)
-def create_knowledge_base():
-    """
-    Purpose: 
-        Set up the knowledge base (KB) for reasoning and planning tasks.
-
-    Expected Input:
-        - None
-
-    Expected Output:
-        - Dictionary mapping route to stops, trip to route, and stop trip count.
-    """
-    for unused , val in GTFSdata['trips'].iterrows():
-        trip_to_route[val['trip_id']] = val['route_id']
-    for unused , val in GTFSdata['stoptimes'].iterrows():
-        tripID = val['trip_id']
-        stopID = val['stop_id']
-        routeID = trip_to_route[tripID]
-        route_to_stops[routeID].append(stopID)
-        stop_trip_count[stopID] += 1
+    Create knowledge base by populating global variables with information from loaded datasets.
+    It establishes the relationships between routes, trips, stops, and fare rules.
     
-    for unused , val in GTFSdata['farerules'].iterrows():
-        routeID = val['route_id']
-        fareID = val['fare_id']
-        fare_rules[routeID] = fareID
-    
-    return {'routeToStops': route_to_stops, 'tripToRoute': trip_to_route, 'stopTripCount': stop_trip_count, 'fareRules': fare_rules}
-load_static_data()
-create_knowledge_base()
+    Returns:
+        None
+    """
+    global route_to_stops, trip_to_route, stop_trip_count, fare_rules, merged_fare_df
 
-# Function to find the busiest routes based on the number of trips
+    # Create trip_id to route_id mapping
+
+    # Map route_id to a list of stops in order of their sequence
+
+    # Ensure each route only has unique stops
+    
+    # Count trips per stop
+
+    # Create fare rules for routes
+    df_stop_times['arrival_time'] = pd.to_datetime(df_stop_times['arrival_time'], format='%H:%M:%S' , errors='coerce').dt.time
+    # Merge fare rules and attributes into a single DataFrame
+    for u , row in df_trips.iterrows():
+        trip_to_route[row['trip_id']] = row['route_id']
+    sequence = defaultdict(list)
+    for u , row in df_stop_times.iterrows():
+        route = trip_to_route[row['trip_id']]
+        stop = row['stop_id']
+        seq = row['stop_sequence']
+        sequence[route].append((seq , stop))
+    for route , stop in sequence.items():
+        stop = sorted(stop)
+        lstop = [st for seq , st in stop]
+        route_to_stops[route] = list(dict.fromkeys(lstop))
+    tempStop = {}
+    for u , row in df_stop_times.iterrows():
+        if tempStop.get(row['stop_id']) is None:
+            tempStop[row['stop_id']] = [row['trip_id']]
+        else:
+            # if row['trip_id'] not in tempStop[row['stop_id']]: # remove if we dont have to check for unique trips
+            tempStop[row['stop_id']].append(row['trip_id'])
+    for stop , trips in tempStop.items():
+        stop_trip_count[stop] = len(trips)
+                
+    fareprice = {row['fare_id'] : row['price'] for u , row in df_fare_attributes.iterrows()}
+    for u , row in df_fare_rules.iterrows():
+        fareid = row['fare_id'] ; route = row['route_id'] ; origin = row['origin_id'] ; dest = row['destination_id'] ; price = fareprice.get(fareid)
+        fare_rules[route] = {'fare_id' : fareid , 'price' : price , 'origin_id' : origin , 'destination_id' : dest}
+    merged_fare_df = pd.merge(df_fare_rules , df_fare_attributes , on='fare_id' , how='left')
+    
+    
+
+# Function to find the top 5 busiest routes based on the number of trips
 def get_busiest_routes():
     """
-    Purpose: 
-        Identify the busiest routes based on the number of trips.
+    Identify the top 5 busiest routes based on trip counts.
 
-    Expected Input:
-        - None
-
-    Expected Output:
-        - List of route IDs sorted by the number of trips in descending order.
+    Returns:
+        list: A list of tuples, where each tuple contains:
+              - route_id (int): The ID of the route.
+              - trip_count (int): The number of trips for that route.
     """
-    routesDictCount = defaultdict(int)
-    for routeID in trip_to_route.values():
-        routesDictCount[routeID] += 1
-    busiestRoute = sorted(routesDictCount, key = routesDictCount.get, reverse = True)
-    return busiestRoute
+    # Implementation here
+    routeTripcount = defaultdict(int)
+    for trip , route in trip_to_route.items() :
+        routeTripcount[route] += 1
+    # print(routeTripcount[789])
+    busieintoutes = sorted(routeTripcount.items(), key = lambda x:x[1] , reverse = True)[:5]
+    return busieintoutes
     
-# print(get_busiest_routes())
     
-    
-
-# Function to find the stops with the most frequent trips
+# Function to find the top 5 stops with the most frequent trips
 def get_most_frequent_stops():
     """
-    Purpose: 
-        Find the stops with the most frequent trips.
+    Identify the top 5 stops with the highest number of trips.
 
-    Expected Input:
-        - None
-
-    Expected Output:
-        - List of stop IDs sorted by the frequency of trips in descending order.
+    Returns:
+        list: A list of tuples, where each tuple contains:
+              - stop_id (int): The ID of the stop.
+              - trip_count (int): The number of trips for that stop.
     """
-    mostFrequentStops = sorted(stop_trip_count, key = stop_trip_count.get, reverse = True)
+    # Implementation here
+    mostFrequentStops = sorted(stop_trip_count.items(), key = lambda x:x[1] , reverse = True)[:5]
     return mostFrequentStops
 
 # Function to find the top 5 busiest stops based on the number of routes passing through them
 def get_top_5_busiest_stops():
     """
-    Purpose: 
-        Identify the top 5 busiest stops based on the number of routes passing through them.
+    Identify the top 5 stops with the highest number of different routes.
 
-    Expected Input:
-        - None
-
-    Expected Output:
-        - List of the top 5 stop IDs sorted by the number of routes passing through them.
+    Returns:
+        list: A list of tuples, where each tuple contains:
+              - stop_id (int): The ID of the stop.
+              - route_count (int): The number of routes passing through that stop.
     """
+    # Implementation here
     stopRouteCount = defaultdict(list)
     for routeID in route_to_stops:
         for stopID in route_to_stops[routeID]:
             if routeID not in stopRouteCount[stopID]:
                 stopRouteCount[stopID].append(routeID)
-    top5BusiestStops = sorted(stopRouteCount, key = lambda x: len(stopRouteCount[x]), reverse = True)[:5]
+    top5BusiestStops = sorted(stopRouteCount.items(), key=lambda x: len(x[1]), reverse=True)[:5]
+    top5BusiestStops = [(stop , len(route)) for stop , route in top5BusiestStops]
     return top5BusiestStops
-# print(get_top_5_busiest_stops())
 
-# Function to find pairs of stops with only one direct route between them
+# Function to identify the top 5 pairs of stops with only one direct route between them
 def get_stops_with_one_direct_route():
     """
-    Purpose: 
-        Find pairs of stops (start and end) that have only one direct route between them.
+    Identify the top 5 pairs of consecutive stops (start and end) connected by exactly one direct route. 
+    The pairs are sorted by the combined frequency of trips passing through both stops.
 
-    Expected Input:
-        - None
-
-    Expected Output:
-        - List of tuples representing pairs of stop IDs with one direct route between them.
+    Returns:
+        list: A list of tuples, where each tuple contains:
+              - pair (tuple): A tuple with two stop IDs (stop_1, stop_2).
+              - route_id (int): The ID of the route connecting the two stops.
     """
-    stopPairs = []
-    for routeID in route_to_stops:
-        for stopID1, stopID2 in combinations(route_to_stops[routeID], 2):
-            stopPairs.append((stopID1, stopID2))
-    stopPairsDict = defaultdict(int)
-    for stopPair in stopPairs:
-        stopPairsDict[stopPair] += 1
-    oneDirectRoute = [key for key, value in stopPairsDict.items() if value == 1]
-    return oneDirectRoute
-print(get_stops_with_one_direct_route())
+   # Implementation here
+    # print(route_to_stops[1433])
+    directRoute = {}
+    for route , stops in route_to_stops.items():
+        for i in range(len(stops) -1):
+            pr = (stops[i] , stops[i+1])
+            if pr not in directRoute:
+                directRoute[pr] = [route]
+            else:
+                directRoute[pr].append(route)
+    ans = []
+    for x in directRoute:
+        if len(set(directRoute[x])) == 1:
+            ans.append((x , directRoute[x][0]))
+    ans = sorted(ans ,key =  lambda x : stop_trip_count[x[0][0]] + stop_trip_count[x[0][1]] , reverse= True)
+    return ans[:5]
+   
+# Function to get merged fare DataFrame
+# No need to change this function
+def get_merged_fare_df():
+    """
+    Retrieve the merged fare DataFrame.
 
-# Function to create a graph representation using Plotly
+    Returns:
+        DataFrame: The merged fare DataFrame containing fare rules and attributes.
+    """
+    global merged_fare_df
+    return merged_fare_df
+
+# Visualize the stop-route graph interactively
 def visualize_stop_route_graph_interactive(route_to_stops):
     """
-    Purpose: 
-        Create a graph representation of the knowledge base using the route to stops mapping.
+    Visualize the stop-route graph using Plotly for interactive exploration.
 
-    Expected Input:
-        - route_to_stops: mapped route to stop ids
+    Args:
+        route_to_stops (dict): A dictionary mapping route IDs to lists of stops.
 
-    Expected Output:
-        - Interactive Graph representation using Plotly.
+    Returns:
+        None
     """
-    pass
+    # Implementation here
+    graphG = nx.Graph()
+    for routeID in route_to_stops:
+        for stops in route_to_stops[routeID]:
+            graphG.add_node(stops)
+        for i in range(len(route_to_stops[routeID])-1):
+            graphG.add_edge(route_to_stops[routeID][i], route_to_stops[routeID][i+1] , route = routeID)
+    layout = nx.spring_layout(graphG)
+    edgeX = [] ; edgeY = []
+    for e in graphG.edges():
+        x0, y0 = layout[e[0]]
+        x1 , y1 = layout[e[1]]
+        edgeX.extend([x0, x1, None])    
+        edgeY.extend([y0, y1, None])
+    traceofG = go.Scatter(x = edgeX, 
+            y = edgeY, 
+            line = dict(width = 0.5, color = '#888'),
+            hoverinfo = 'none', 
+            mode = 'lines')
+    nodeX = [] ; nodeY = []
+    for node in layout:
+        x, y = layout[node]
+        nodeX.append(x)
+        nodeY.append(y)
+    nodeAdjacencies = [len(graphG[node]) for node in graphG.nodes()]
+    nodeText = ["Stop ID is: " + str(node) + "Number of routes passing through this stop is: " + str(len(graphG[node])) for node in graphG.nodes()]
+    traceofNode = go.Scatter(
+        x=nodeX, y=nodeY,
+        mode='markers',
+        hoverinfo='text',
+        text=nodeText,
+        marker=dict(
+            showscale=True,
+            colorscale='YlGnBu',
+            reversescale=True,
+            color=nodeAdjacencies,
+            size=10,
+            colorbar=dict(
+                thickness=15,
+                title='Node Connections',
+                xanchor='left',
+                titleside='right'
+            ),
+            line=dict(width=2)
+        )
+    )
+    # for n in graphG.nodes():
+    #     nodeAdjacencies.append(len(graphG[n]))
+    #     nodeText.append("Stop ID is" + int(n) + "Number of routes passing through this stop is" + int(len(graphG[n])))
+    traceofNode.text = nodeText
+    fig = go.Figure(data = [traceofG, traceofNode], 
+                    layout=go.Layout(showlegend = False,
+                                    hovermode = 'closest',
+                                    margin = dict(b = 20, l = 5, r = 5, t = 40),
+                                    xaxis = dict(showgrid = False, zeroline = False, showticklabels = False), 
+                                    yaxis = dict(showgrid = False, zeroline = False, showticklabels = False))
+                    )
+            
+            
+    
+    fig.show()
+# create_kb()
+# visualize_stop_route_graph_interactive(route_to_stops)
 
-
-# Q.2: Reasoning
-# Brute-Force Approach for DirectRoute function
-def direct_route_brute_force(start_stop, end_stop, kb):
+# Brute-Force Approach for finding direct routes
+def direct_route_brute_force(start_stop, end_stop):
     """
-    Purpose: 
-        Find all direct routes between two stops using a brute-force approach.
+    Find all valid routes between two stops using a brute-force method.
 
-    Expected Input:
-        - start_stop: ID of the start stop.
-        - end_stop: ID of the end stop.
+    Args:
+        start_stop (int): The ID of the starting stop.cl
+        end_stop (int): The ID of the ending stop.
 
-    Expected Output:
-        - List of route IDs connecting the start stop to the end stop directly (no interchanges).
+    Returns:
+        list: A list of route IDs (int) that connect the two stops directly.
     """
-    pass
+    # tracemalloc.start()
+    # startTime = time.time()
+    ans = []
+    for route , stop in route_to_stops.items():
+        flag = False
+        for i in range(len(stop)):
+            for j in range(len(stop)):
+                if i != j:
+                    if stop[i] == start_stop and stop[j] == end_stop:
+                        # flag = True
+                        ans.append(route)
+    # endTime = time.time()
+    # curr , peak = tracemalloc.get_traced_memory()
+    # tracemalloc.stop()
+    # print(f"Time taken for brute-force direct route is:  {endTime - startTime:.6f} sec")
+    # print(f"Current memory usage for brute-force direct route is:  {curr/(1024*1024):.6f} MB")
+    # print(f"Peak memory usage for brute-force direct route is:  {peak/(1024*1024):.6f} MB")
+    return ans
 
-# Create terms
-# define predicates
+# Initialize Datalog predicates for reasoning
+pyDatalog.create_terms('RouteHasStop, DirectRoute, OptimalRoute, X, Y, Z, R, R1, R2')  
 
-# adding facts to Knowledge Base
+def initialize_datalog():
+    """
+    Initialize Datalog terms and predicates for reasoning about routes and stops.
+
+    Returns:
+        None
+    """
+    pyDatalog.clear()  # Clear previous terms
+    print("Terms initialized: DirectRoute, RouteHasStop, OptimalRoute")  # Confirmation print
+
+    # Define Datalog predicates
+    create_kb()  # Populate the knowledge base 
+    add_route_data(route_to_stops)  # Add route data to Datalog
+# Adding route data to Datalog
 def add_route_data(route_to_stops):
     """
-    Purpose: 
-        Add route to stop mappings to knowledge base.
+    Add the route data to Datalog for reasoning.
 
-    Expected Input:
-        - route_to_stops: mapping created, which maps route id to stop ids.
+    Args:
+        route_to_stops (dict): A dictionary mapping route IDs to lists of stops.
 
-    Expected Output:
-        - None
+    Returns:
+        None
     """
-    pass
-
-
-# defining query functions
+    # Implementation here         
+    for r , s in route_to_stops.items():
+        for st in s:
+            +RouteHasStop(r,st)
+# Function to query direct routes between two stops
 def query_direct_routes(start, end):
     """
-    Purpose: 
-        Find all direct routes between two stops using the PyDatalog library.
+    Query for direct routes between two stops.
+    Args:
+        start (int): The ID of the starting stop.
+        end (int): The ID of the ending stop.
 
-    Expected Input:
-        - start_stop: ID of the start stop.
-        - end_stop: ID of the end stop.
-
-    Expected Output:
-        - List of route IDs connecting the start stop to the end stop directly (no interchanges).
+    Returns:
+        list: A sorted list of route IDs (int) connecting the two stops.
     """
+    DirectRoute(X, Y) <= (RouteHasStop(R, X) & RouteHasStop(R, Y))
+    # startTime = time.time()
+    # tracemalloc.start()
+    ans = (DirectRoute(start , end) & (RouteHasStop(R,start) & RouteHasStop(R,end))).data
+    res = [a[0] for a in ans]
+    # endTime = time.time()
+    # curr , peak = tracemalloc.get_traced_memory()
+    # print(f"Time taken for FOL-based direct route is:  {endTime - startTime:.6f} sec")
+    # print(f"Current memory usage for FOL-based direct route is:  {curr/(1024*1024):.6f} MB")
+    # print(f"Peak memory usage for FOL-based direct route is:  {peak/(1024*1024):.6f} MB")
+    return sorted(list(set(res)))
 
-    # Test cases: 
-
-    # 1. 
-    # I/p - (2573, 1177) 
-    # O/p - [10001, 1117, 1407]
-
-    # 2. 
-    # I/p - (2001, 2005)
-    # O/p - [10001, 1151]
-
-    pass
-
-# Planning: Forward Chaining for Optimal Route
-
-# Create terms
-# Define predicates
-# Add facts to knowledge base
-
-def forward_chaining(start_stop, end_stop, via_stop, max_transfers):
+# Forward chaining for optimal route planning
+def forward_chaining(start_stop_id, end_stop_id, stop_id_to_include, max_transfers=1):
     """
-    Purpose: 
-        Plan an optimal route using Forward Chaining.
+    Perform forward chaining to find optimal routes considering transfers.
 
-    Expected Input:
-        - start_stop: ID of the start stop.
-        - end_stop: ID of the end stop.
-        - via_stop: ID of the intermediate stop.
-        - max_transfers: Maximum number of route interchanges allowed.
+    Args:
+        start_stop_id (int): The starting stop ID.
+        end_stop_id (int): The ending stop ID.
+        stop_id_to_include (int): The stop ID where a transfer occurs.
+        max_transfers (int): The maximum number of transfers allowed.
 
-    Expected Output:
-        - List of optimal route IDs with respect to the constraints.
-        - output format: list of (route_id1, via_stop_id, route_id2) 
+    Returns:
+        list: A list of unique paths (list of tuples) that satisfy the criteria, where each tuple contains:
+              - route_id1 (int): The ID of the first route.
+              - stop_id (int): The ID of the intermediate stop.
+              - route_id2 (int): The ID of the second route.
     """
-    pass
+    
+    # Define the forward chaining logic
+    OptimalRoute(X, Y, Z, R1, R2) <= (RouteHasStop(R1, X) & RouteHasStop(R1, Y) & RouteHasStop(R2, Y) & RouteHasStop(R2, Z) & (R1 != R2))
+    # startTime = time.time()
+    # tracemalloc.start()
+    res = OptimalRoute(start_stop_id, stop_id_to_include, end_stop_id, R1, R2).data
+    res = [(r1, stop_id_to_include, r2) for (r1, r2) in res]
+    # endTime = time.time()
+    # curr , peak = tracemalloc.get_traced_memory()
+    # tracemalloc.stop()
+    # print(f"Time taken for FOL-based forward chaining is:  {endTime - startTime:.6f} sec")
+    # print(f"Current memory usage for FOL-based forward chaining is:  {curr/(1024*1024):.6f} MB")
+    # print(f"Peak memory usage for FOL-based forward chaining is:  {peak/(1024*1024):.6f} MB")
+    return res
+       
+                                    
+    
 
-# Planning: Backward Chaining for Optimal Route
-def backward_chaining_planning(start_stop, end_stop, via_stop, max_transfers, kb):
+# Backward chaining for optimal route planning
+def backward_chaining(start_stop_id, end_stop_id, stop_id_to_include, max_transfers):
     """
-    Purpose: 
-        Plan an optimal route using Backward Chaining.
+    Perform backward chaining to find optimal routes considering transfers.
 
-    Expected Input:
-        - start_stop: ID of the start stop.
-        - end_stop: ID of the end stop.
-        - via_stop: ID of the intermediate stop.
-        - max_transfers: Maximum number of route interchanges allowed.
+    Args:
+        start_stop_id (int): The starting stop ID.
+        end_stop_id (int): The ending stop ID.
+        stop_id_to_include (int): The stop ID where a transfer occurs.
+        max_transfers (int): The maximum number of transfers allowed.
 
-    Expected Output:
-        - List of optimal route IDs with respect to the constraints.
-        - output format: list of (route_id1, via_stop_id, route_id2) 
+    Returns:
+        list: A list of unique paths (list of tuples) that satisfy the criteria, where each tuple contains:
+              - route_id1 (int): The ID of the first route.
+              - stop_id (int): The ID of the intermediate stop.
+              - route_id2 (int): The ID of the second route.
     """
-    pass
+    # Implementation here
+    # startTime = time.time()
+    # tracemalloc.start()
+    res = OptimalRoute(end_stop_id, stop_id_to_include, start_stop_id, R1, R2).data
+    res = [(r1, stop_id_to_include, r2) for (r1, r2) in res]
+    # endTime = time.time()
+    # curr , peak = tracemalloc.get_traced_memory()
+    # tracemalloc.stop()
+    # print(f"Time taken for FOL-based backward chaining is:  {endTime - startTime:.6f} sec")
+    # print(f"Current memory usage for FOL-based backward chaining is:  {curr/(1024*1024):.6f} MB")
+    # print(f"Peak memory usage for FOL-based backward chaining is:  {peak/(1024*1024):.6f} MB")
+    return res
 
-
-# Create terms
-# Define predicates for routes and states
-# Define initial and goal state
-# Add facts to knowledge base
-
-
-# Planning using PDLL (Planning Domain Definition Language)
-def pdll_planning(start_stop, end_stop, via_stop, max_transfers):
+    
+pyDatalog.create_terms('Board' , 'Transfer' , 'OptimalRouteNew')
+# PDDL-style planning for route finding
+def pddl_planning(start_stop_id, end_stop_id, stop_id_to_include, max_transfers):
     """
-    Purpose: 
-        Plan an optimal route using PDLL.
+    Implement PDDL-style planning to find routes with optional transfers.
 
-    Expected Input:
-        - start_stop: ID of the start stop.
-        - end_stop: ID of the end stop.
-        - via_stop: ID of the intermediate stop.
-        - max_transfers: Maximum number of route interchanges allowed.
+    Args:
+        start_stop_id (int): The starting stop ID.
+        end_stop_id (int): The ending stop ID.
+        stop_id_to_include (int): The stop ID for a transfer.
+        max_transfers (int): The maximum number of transfers allowed.
 
-    Expected Output:
-        - List of optimal route IDs with respect to the constraints.
-        - output format: list of (route_id1, via_stop_id, route_id2)
-        - print the state information at each step
-        - example:   
-            Step 1: 
-                Action: Board Route 10153 at Stop 22540
-                Current State: At Stop 22540 on Route 10153
-                Current Path: [(10153, 22540)]
+    Returns:
+        list: A list of unique paths (list of tuples) that satisfy the criteria, where each tuple contains:
+              - route_id (int): The ID of the route.
+              - stop_id (int): The ID of the stop.
     """
-    pass
+    # Implementation here
+    # Define the PDDL-style planning logic
+    Board(R , X , Y) <= (RouteHasStop(R,X) & RouteHasStop(R,Y))
+    Transfer(R1 , R2 , Y , Z) <= (RouteHasStop(R1 , Y) & RouteHasStop(R2 , Y) & RouteHasStop(R2 , Z) & (R1 != R2))
+    OptimalRouteNew(X , Y , Z , R1 , R2) <= (Board(R1 , X , Y) & Transfer(R1 , R2 , Y , Z))
+    # startTime = time.time()
+    # tracemalloc.start()
+    res = OptimalRouteNew(start_stop_id , stop_id_to_include , end_stop_id , R1 , R2).data
+    ans = []
+    for (r1 , r2) in res:
+        ans.append((r1 , stop_id_to_include , r2))
+        # print(f'Current State: Route from {r1} to {r2} via {stop_id_to_include}') 
+    # endTime = time.time()
+    # curr , peak = tracemalloc.get_traced_memory()
+    # tracemalloc.stop()
+    # print(f"Time taken for pddl is:  {endTime - startTime:.6f} sec")
+    # print(f"Current memory usage for pddl is:  {curr/(1024*1024):.6f} MB")
+    # print(f"Peak memory usage for pddl is:  {peak/(1024*1024):.6f} MB")
+    return ans
+    
 
-# Public test cases for all three parts: 
-# [start_id, stop_id, intermediate_stop_id, max_transfers]
-
-# 1. 
-# I/p - [22540, 2573, 4686, 1]
-# O/p - [(10153, 4686, 1407)]
-
-# 2. 
-# I/p - [951, 340, 300, 1]
-# O/p - [(294, 300, 712),
-#  (10453, 300, 712),
-#  (1211, 300, 712),
-#  (1158, 300, 712),
-#  (37, 300, 712),
-#  (1571, 300, 712),
-#  (49, 300, 712),
-#  (387, 300, 712),
-#  (1206, 300, 712),
-#  (1038, 300, 712),
-#  (10433, 300, 712),
-#  (121, 300, 712)]
-
-
-# Bonus: Extend Planning by Considering Fare Constraints
-
-
-# Data Pruning
+# Function to filter fare data based on an initial fare limit
 def prune_data(merged_fare_df, initial_fare):
-    # Filter routes that have minimum fare less than or equal to initial fare
     """
-    Purpose: 
-        Use merged fare dataframes and prune the data to filter out routes.
+    Filter fare data based on an initial fare limit.
 
-    Expected Input:
-        - merged_fare_df: merging fare rules df and fare attributes df
-        - initial_fare: some initial fare value to be passed as a parameter
+    Args:
+        merged_fare_df (DataFrame): The merged fare DataFrame.
+        initial_fare (float): The maximum fare allowed.
 
-    Expected Output:
-        - pruned_df: pruned merged_fare_df 
+    Returns:
+        DataFrame: A filtered DataFrame containing only routes within the fare limit.
     """
-    pass
-
-
+    # Implementation here
+    ans = merged_fare_df[merged_fare_df['price'] <= initial_fare]
+    return ans
 # Pre-computation of Route Summary
 def compute_route_summary(pruned_df):
     """
-    Purpose: 
-        Pre-compute a summary of each route, including the minimum price and the set of stops for each route.
+    Generate a summary of routes based on fare information.
 
-    Expected Input:
-        - pruned_df: A DataFrame with at least the following columns:
-            - 'route_id': The ID of the route.
-            - 'origin_id': The ID of the stop.
-            - 'price': The price associated with the route and stop.
+    Args:
+        pruned_df (DataFrame): The filtered DataFrame containing fare information.
 
-    Expected Output:
-        - route_summary: A dictionary where:
-            - Keys are route IDs.
-            - Values are dictionaries containing:
-                - 'min_price': The minimum price found for the route.
-                - 'stops': A set of all unique stop IDs for the route.
+    Returns:
+        dict: A summary of routes with the following structure:
+              {
+                  route_id (int): {
+                      'min_price': float,          # The minimum fare for the route
+                      'stops': set                # A set of stop IDs for that route
+                  }
+              }
     """
-    pass
+    # Implementation here
+    sm = {}
+    for r in pruned_df['route_id'].unique():
+        rData = pruned_df[pruned_df['route_id'] == r]
+        minPrice = rData['price'].min()
+        s = set(route_to_stops[r])
+        sm[r] = {'min_price' : minPrice , 'stops' : s}
+    return sm
 
-
+# BFS for optimized route planning
 def bfs_route_planner_optimized(start_stop_id, end_stop_id, initial_fare, route_summary, max_transfers=3):
     """
-    Purpose: 
-        Perform a breadth-first search (BFS) to find an optimized route from a start stop to an end stop 
-        considering the fare and transfer limits.
+    Use Breadth-First Search (BFS) to find the optimal route while considering fare constraints.
 
-    Expected Input:
-        - start_stop_id: The ID of the starting stop.
-        - end_stop_id: The ID of the destination stop.
-        - initial_fare: The total fare available for the journey.
-        - route_summary: A dictionary with route summaries containing:
-            - 'stops': A set of stops for each route.
-            - 'min_price': The minimum fare for the route.
-        - max_transfers: The maximum number of transfers allowed (default is 3).
+    Args:
+        start_stop_id (int): The starting stop ID.
+        end_stop_id (int): The ending stop ID.
+        initial_fare (float): The available fare for the trip.
+        route_summary (dict): A summary of routes with fare and stop information.
+        max_transfers (int): The maximum number of transfers allowed (default is 3).
 
-    Expected Output:
-        - result: A list representing the optimal path taken, or None if no valid route is found.
-
-    Note:
-        The function prints detailed steps of the search process, including actions taken and current state.
-        Output format: [(route_id1, intermediate_stop_id1), (route_id2, intermediate_stop_id2), …, (route_idn, end_stop_id)]
-        Example: 
-            Step 1:
-                Action: Move to 1562 on Route 10004
-                Current State: At Stop 22540 on Route None
-                Current Path: [(10004, 1562)]
-                Remaining Fare: 5.0
+    Returns:
+        list: A list representing the optimal route with stops and routes taken, structured as:
+              [
+                  (route_id (int), stop_id (int)),  # Tuple for each stop taken in the route
+                  ...
+              ]
     """
-
-    # test case: 
-    # I/p - [22540, 2573, 10, 3]
-    # O/p - [(10153, 4686), (1407, 2573)]
-    pass
+    # Implementation here
+    que = deque([(start_stop_id , [] , -1 , initial_fare)])
+    vis = set()
+    while que:
+        curr , ans , transfer , rem = que.popleft()
+        if transfer > max_transfers or rem < 0:
+            continue
+        if curr == end_stop_id:
+            return ans
+        for r, rinfo in route_summary.items():
+            if curr in rinfo['stops'] and rinfo['min_price'] <= rem:
+                for next in rinfo['stops']:
+                    if next != curr and (next , r) not in vis:
+                        vis.add((next , r))
+                        que.append((next , ans + [(r, next)] , transfer + 1 , rem - rinfo['min_price']))
+    return []   

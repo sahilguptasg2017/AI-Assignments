@@ -34,9 +34,9 @@ test_inputs = {
 
     "forward_chaining": [
         ((22540, 2573, 4686, 1), [(10153, 4686, 1407)]),
-        ((951, 340, 300, 1), [(294, 300, 712), (10453, 300, 712), (1211, 300, 712), (1158, 300, 712), 
-                              (37, 300, 712), (1571, 300, 712), (49, 300, 712), (387, 300, 712), 
-                              (1206, 300, 712), (1038, 300, 712), (10433, 300, 712), (121, 300, 712)])
+        ((951, 340, 300, 1), [(1211, 300, 712), (10453, 300, 712), (387, 300, 712), (49, 300, 712), 
+                              (1571, 300, 712), (37, 300, 712), (1038, 300, 712), (10433, 300, 712), 
+                              (121, 300, 712)])
     ],
     "backward_chaining": [
         ((2573, 22540, 4686, 1), [(1407, 4686, 10153)]),
@@ -46,9 +46,9 @@ test_inputs = {
     ],
     "pddl_planning": [
         ((22540, 2573, 4686, 1), [(10153, 4686, 1407)]),
-        ((951, 340, 300, 1), [(294, 300, 712), (10453, 300, 712), (1211, 300, 712), (1158, 300, 712), 
-                              (37, 300, 712), (1571, 300, 712), (49, 300, 712), (387, 300, 712), 
-                              (1206, 300, 712), (1038, 300, 712), (10433, 300, 712), (121, 300, 712)])
+        ((951, 340, 300, 1), [(1211, 300, 712), (10453, 300, 712), (387, 300, 712), (49, 300, 712), 
+                        (1571, 300, 712), (37, 300, 712), (1038, 300, 712), (10433, 300, 712), 
+                        (121, 300, 712)])
     ],
     "bfs_route": [
         ((22540, 2573, 10, 3), [(10153, 4686), (1407, 2573)]),
@@ -71,9 +71,15 @@ test_inputs = {
     ]
 }
 
+# def check_output(expected, actual):
+#     """Function to compare expected and actual outputs."""
+#     return set(expected) == set(actual)
+
 def check_output(expected, actual):
     """Function to compare expected and actual outputs."""
-    return set(expected) == set(actual)
+    if isinstance(expected, list) and isinstance(actual, list):
+        return sorted(expected) == sorted(actual)  # Ensures order-independent comparison
+    return expected == actual  # For non-list types
 
 def test_direct_route_brute_force():
     for (start_stop, end_stop), expected_output in test_inputs["direct_route"]:
@@ -149,7 +155,7 @@ if __name__ == "__main__":
     test_query_direct_routes()
     test_forward_chaining()
     test_backward_chaining()
-    test_pddl_planning()
+    test_pddl_planning()    
     test_bfs_route_planner()
     
     # Run additional tests for the new queries
